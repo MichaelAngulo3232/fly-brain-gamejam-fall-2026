@@ -6,10 +6,12 @@ Usage (from the repo root):
     pip install pandas numpy
     python tools/build_brains.py --data data --out Content/Brains
 
-Inputs (download from https://codex.flywire.ai/api/download into data/):
-    connections.csv.gz     pre_root_id, post_root_id, neuropil, syn_count, nt_type
-    classification.csv.gz  root_id, super_class, class, cell_type, side, ...
-    coordinates.csv.gz     root_id, position   (optional: used for HUD dots + slice damage)
+Inputs (FAFB v783, from https://codex.flywire.ai/api/download into data/):
+    connections_princeton.csv.gz    pre_root_id, post_root_id, neuropil, syn_count, nt_type
+                                    ("Connections (Filtered)", 5+ synapses)
+    classification.csv.gz           root_id, flow, super_class, class, sub_class, hemilineage, side, nerve
+    consolidated_cell_types.csv.gz  root_id, primary_type, additional_type(s)  ("Cell Types")
+    coordinates.csv.gz              root_id, position, supervoxel_id  ("Marked Neuron Coordinates")
 
 Output .bin layout (little-endian), one file per brain:
     char[4]   magic "FLYB"
@@ -61,9 +63,26 @@ BRAINS = {
 INHIBITORY = {"GABA", "GLUT"}
 
 
+def first_existing(data_dir: Path, names):
+    for n in names:
+        if (data_dir / n).exists():
+            return data_dir / n
+    raise FileNotFoundError(f"None of {names} found in {data_dir}/")
+
+
 def load(data_dir: Path):
-    conn = pd.read_csv(data_dir / "connections.csv.gz")
+    # Codex names the filtered (5+ synapse) table connections_princeton.csv.gz
+    conn = pd.read_csv(first_existing(data_dir, ["connections_princeton.csv.gz", "connections.csv.gz"]))
     cls = pd.read_csv(data_dir / "classification.csv.gz")
+    # Cell types live in their own file (root_id, primary_type, additional_type(s));
+    # merge primary_type in as cell_type so the rest of the script can use it.
+    types_path = data_dir / "consolidated_cell_types.csv.gz"
+    if types_path.exists():
+        types = pd.read_csv(types_path)[["root_id", "primary_type"]]
+        cls = cls.merge(types.rename(columns={"primary_type": "cell_type"}), on="root_id", how="left")
+    elif "cell_type" not in cls.columns:
+        print("  WARNING: consolidated_cell_types.csv.gz not found; cell-type rules and the constants file will be empty")
+        cls["cell_type"] = None
     coords_path = data_dir / "coordinates.csv.gz"
     coords = pd.read_csv(coords_path) if coords_path.exists() else None
     return conn, cls, coords
@@ -110,16 +129,16 @@ def build(name, ids, conn, cls, coords, out_dir: Path):
     pos = np.zeros((len(ids), 3), dtype=np.float32)
     if coords is not None:
         first = coords.drop_duplicates("root_id").set_index("root_id")["position"]
-        for i, rid in enumerate(ids):
-            p = first.get(rid)
-            if isinstance(p, str):
-                xyz = [float(v) for v in p.strip("[]").replace(",", " ").split()]
-                if len(xyz) == 3:
-                    pos[i] = np.array(xyz, dtype=np.float32) / 1000.0
+        p = first.reindex(ids)  # one position string per neuron, NaN if missing
+        xyz = p.astype(str).str.strip("[]").str.replace(",", " ").str.split(expand=True)
+        if xyz.shape[1] >= 3:
+            vals = xyz.iloc[:, :3].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
+            ok = ~np.isnan(vals).any(axis=1)
+            pos[ok] = (vals[ok] / 1000.0).astype(np.float32)
 
     # Flag descending neurons so the game knows where to read movement output.
-    desc = set(cls.loc[cls["super_class"] == "descending", "root_id"])
-    flags = np.array([1 if rid in desc else 0 for rid in ids], dtype=np.uint8)
+    desc = cls.loc[cls["super_class"] == "descending", "root_id"].to_numpy()
+    flags = np.isin(ids, desc).astype(np.uint8)
 
     out = out_dir / f"{name}.bin"
     with open(out, "wb") as f:

@@ -5,11 +5,13 @@ fruit fly brain wiring from the FlyWire adult brain connectome.
 
 ## Brain data setup (each teammate, once)
 
-1. Go to https://codex.flywire.ai/api/download (free login).
-2. Download these into a `data/` folder at the repo root:
-   - `connections.csv.gz`
-   - `classification.csv.gz`
-   - `coordinates.csv.gz`
+1. Go to https://codex.flywire.ai/api/download (free Google login), pick **FAFB v783**,
+   and tick the citation-guidelines box.
+2. Download these four into a `data/` folder at the repo root (only the brain team needs to):
+   - `connections_princeton.csv.gz` ("Connections (Filtered)", 68 MB)
+   - `classification.csv.gz` ("Classification / Hierarchical Annotations")
+   - `consolidated_cell_types.csv.gz` ("Cell Types")
+   - `coordinates.csv.gz` ("Marked Neuron Coordinates")
 3. Build the brain files:
    ```
    pip install pandas numpy
