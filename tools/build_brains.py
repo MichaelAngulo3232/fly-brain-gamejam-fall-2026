@@ -142,7 +142,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data", help="folder with the Codex CSVs")
     ap.add_argument("--out", default="Content/Brains", help="where to write .bin files")
-    ap.add_argument("--header", default="Source/FlyGame/FlyNeuronIDs.h",
+    ap.add_argument("--header", default="Source/fruit_fly_game/FlyNeuronIDs.h",
                     help="where to write the generated C++ constants file")
     args = ap.parse_args()
 

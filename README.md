@@ -16,9 +16,9 @@ fruit fly brain wiring from the FlyWire adult brain connectome.
    python tools/build_brains.py --data data --out Content/Brains
    ```
    This writes `sniffer.bin`, `dodger.bin` and `boss.bin` into `Content/Brains/`,
-   plus the constants file `Source/FlyGame/FlyNeuronIDs.h` (named lists of FlyWire IDs,
+   plus the constants file `Source/fruit_fly_game/FlyNeuronIDs.h` (named lists of FlyWire IDs,
    e.g. `FlyNeurons::GIANT_FIBER_LEFT`, so code never hard-codes 18-digit numbers).
-   If your Unreal module folder isn't `Source/FlyGame/`, pass `--header` with the right path.
+   If your Unreal module folder isn't `Source/fruit_fly_game/`, pass `--header` with the right path.
 
 `data/` is ignored by git. The `.bin` files ARE committed, so teammates who only
 work on gameplay or art don't need to run the script.
