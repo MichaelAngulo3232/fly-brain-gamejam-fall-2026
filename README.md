@@ -35,3 +35,21 @@ See the comment at the top of `tools/build_brains.py`.
 ## Credits
 
 Brain connectivity data: FlyWire Consortium (Dorkenwald et al., 2024; Schlegel et al., 2024).
+
+## Getting started (everyone, once)
+
+1. Install **Unreal Engine 5.8** from the Epic Games Launcher, and install Git.
+2. Install a C++ compiler. This is a C++ project, so Unreal builds our code the first time you open it.
+   - **Windows:** Visual Studio 2026 Community (free). In the installer tick **Game development with C++**,
+     **Desktop development with C++** and **.NET desktop development**.
+   - **Mac:** Xcode from the App Store. Open it once and let it install its components.
+3. Clone the repo: `git clone https://github.com/MichaelAngulo3232/fly-brain-gamejam-fall-2026.git`
+4. Double-click `fruit_fly_game.uproject`. When it says modules need to be rebuilt, click **Yes**.
+   The first open compiles code and shaders and can take a while. Let it finish; it only happens once.
+5. Laptop running slow? In the bar above the viewport open **Performance and Scalability**:
+   set **Viewport Scalability** to Medium (or Low) and **Screen Percentage** to 50-75%.
+6. Make your own branch before you change anything: `git checkout -b yourname/role`.
+   Pull main into your branch every day with `git pull origin main`. Michael merges finished work into main.
+
+**If the first open fails to build (Windows):** right-click `fruit_fly_game.uproject` →
+**Generate Visual Studio project files**, open the `.sln`, and press Build. Then open the project again.
