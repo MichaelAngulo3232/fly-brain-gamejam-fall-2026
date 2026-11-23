@@ -39,6 +39,7 @@ import pandas as pd
 #   neuropils   -> neuron has a synapse in one of these brain regions
 #   super_class -> FlyWire's broad category (e.g. "descending")
 #   cell_types  -> specific named cell types
+#   all_except_super_class -> every neuron EXCEPT these broad categories
 # NOTE: region and cell-type names below should be double-checked against the
 # Codex data before relying on them (look them up at codex.flywire.ai).
 # ---------------------------------------------------------------------------
@@ -55,8 +56,12 @@ BRAINS = {
         "super_class": ["descending"],
         "cell_types": ["LC4", "LPLC2", "DNp01"],  # DNp01 = giant fiber
     },
-    # Everything
-    "boss": "ALL",
+    # Whole central brain, without the optic lobes (the eye's pixel processing).
+    # The game feeds the looming detectors directly, so the optic lobes would sit idle.
+    "boss": {
+        "all_except_super_class": ["optic", "visual_projection", "visual_centrifugal"],
+        "cell_types": ["LC4", "LPLC2"],  # keep our looming inputs (they are visual projection neurons)
+    },
 }
 
 # Neurotransmitters treated as inhibitory (others count as excitatory)
@@ -90,15 +95,23 @@ def load(data_dir: Path):
 
 def pick_neurons(spec, conn, cls):
     """Return the set of root_ids that belong to this brain."""
+    everyone = set(conn["pre_root_id"]) | set(conn["post_root_id"])
     if spec == "ALL":
-        return set(conn["pre_root_id"]) | set(conn["post_root_id"])
+        return everyone
     keep = set()
-    if spec["neuropils"]:
+    if spec.get("all_except_super_class"):
+        for sc in spec["all_except_super_class"]:
+            n = int((cls["super_class"] == sc).sum())
+            note = "" if n else "   WARNING: none found, check the name on Codex"
+            print(f"  removing {n:>7,} '{sc}' neurons{note}")
+        dropped = set(cls.loc[cls["super_class"].isin(spec["all_except_super_class"]), "root_id"])
+        keep |= everyone - dropped
+    if spec.get("neuropils"):
         in_region = conn[conn["neuropil"].isin(spec["neuropils"])]
         keep |= set(in_region["pre_root_id"]) | set(in_region["post_root_id"])
-    if spec["super_class"]:
+    if spec.get("super_class"):
         keep |= set(cls.loc[cls["super_class"].isin(spec["super_class"]), "root_id"])
-    if spec["cell_types"]:
+    if spec.get("cell_types"):
         keep |= set(cls.loc[cls["cell_type"].isin(spec["cell_types"]), "root_id"])
     return keep
 
@@ -168,6 +181,7 @@ def main():
     data_dir, out_dir = Path(args.data), Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     conn, cls, coords = load(data_dir)
+    print("super classes in this data:", ", ".join(sorted(cls["super_class"].dropna().unique())))
     for name, spec in BRAINS.items():
         build(name, pick_neurons(spec, conn, cls), conn, cls, coords, out_dir)
     write_constants(cls, Path(args.header))
@@ -188,6 +202,17 @@ NAMED_TYPES = {
     "WALK_FORWARD": "DNp09",  # walk forward
 }
 
+# Smell inputs. FlyWire labels smell receptor neurons with class "olfactory";
+# their glomerulus name (ORN_DM1, ...) is the type. Side = which antenna.
+SMELL_GROUPS = {
+    # Glomeruli that respond to fruity esters and vinegar (fermenting fruit):
+    # DM1 (ethyl acetate), DM2 (ethyl esters), DM3 (pentyl acetate),
+    # DM4 (methyl acetate), VA2 (2,3-butanedione).
+    "SMELL_FRUIT": ["ORN_DM1", "ORN_DM2", "ORN_DM3", "ORN_DM4", "ORN_VA2"],
+    # Every smell receptor neuron. Useful for testing.
+    "SMELL_ALL": None,
+}
+
 
 def write_constants(cls, header: Path):
     """Write a C++ header listing the FlyWire IDs for each named type, per side."""
@@ -201,15 +226,30 @@ def write_constants(cls, header: Path):
         "namespace FlyNeurons",
         "{",
     ]
+    groups = []  # (constant name, label for the comment, matching rows)
     for name, cell_type in NAMED_TYPES.items():
         rows = cls[cls["cell_type"] == cell_type]
         if rows.empty:
             print(f"  WARNING: no neurons found for cell type {cell_type} ({name}); check the name on Codex")
+        groups.append((name, cell_type, rows))
+
+    smell = cls[cls["class"] == "olfactory"]
+    if smell.empty:
+        print("  WARNING: no neurons with class 'olfactory' found; smell inputs will be empty")
+    for name, types in SMELL_GROUPS.items():
+        rows = smell if types is None else smell[smell["cell_type"].isin(types)]
+        if rows.empty:
+            print(f"  WARNING: no smell neurons found for {name}; check the type names on Codex")
+        groups.append((name, "all olfactory" if types is None else " ".join(types), rows))
+
+    for name, label, rows in groups:
         for side in ("left", "right"):
             ids = sorted(int(x) for x in rows.loc[rows["side"] == side, "root_id"])
             body = ", ".join(f"{i}LL" for i in ids)
-            lines.append(f"    // {cell_type}, {side} side: {len(ids)} neuron(s)")
+            lines.append(f"    // {label}, {side} side: {len(ids)} neuron(s)")
             lines.append(f"    inline const TArray<int64> {name}_{side.upper()} = {{ {body} }};")
+        n_left = int((rows["side"] == "left").sum()); n_right = int((rows["side"] == "right").sum())
+        print(f"  {name:13s} left {n_left:>5}  right {n_right:>5}")
     lines += ["}", ""]
     header.write_text("\n".join(lines))
     print(f"constants -> {header}")
