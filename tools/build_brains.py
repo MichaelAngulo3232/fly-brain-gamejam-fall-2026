@@ -6,6 +6,10 @@ Usage (from the repo root):
     pip install pandas numpy
     python tools/build_brains.py --data data --out Content/Brains
 
+Builds dodger.bin and boss.bin from the data, writes FlyNeuronIDs.h, then makes
+sniffer.bin by trimming the boss (make_sniffer.py). Check the results with:
+    python tools/check_brain.py Content/Brains/<name>.bin
+
 Inputs (FAFB v783, from https://codex.flywire.ai/api/download into data/):
     connections_princeton.csv.gz    pre_root_id, post_root_id, neuropil, syn_count, nt_type
                                     ("Connections (Filtered)", 5+ synapses)
@@ -44,12 +48,8 @@ import pandas as pd
 # Codex data before relying on them (look them up at codex.flywire.ai).
 # ---------------------------------------------------------------------------
 BRAINS = {
-    # Smell only: antennal lobe + lateral horn, plus movement outputs
-    "sniffer": {
-        "neuropils": ["AL_L", "AL_R", "LH_L", "LH_R"],
-        "super_class": ["descending"],
-        "cell_types": [],
-    },
+    # The sniffer is not listed here: it is cut from the boss by make_sniffer.py
+    # (keeps every neuron that smell actually uses), which runs at the end.
     # Danger vision + escape: looming detectors, giant fiber, movement outputs
     "dodger": {
         "neuropils": [],
@@ -186,6 +186,10 @@ def main():
         build(name, pick_neurons(spec, conn, cls), conn, cls, coords, out_dir)
     write_constants(cls, Path(args.header))
 
+    # The sniffer is trimmed from the boss, so it is made last (it needs boss.bin and the header).
+    import make_sniffer
+    make_sniffer.build(out_dir / "boss.bin", Path(args.header), out_dir / "sniffer.bin")
+
 
 # ---------------------------------------------------------------------------
 # Constants file: the named FlyWire IDs the game code reads.
@@ -200,6 +204,9 @@ NAMED_TYPES = {
     "STEER_B": "DNa02",       # steering
     "MOONWALKER": "MDN",      # walk backward
     "WALK_FORWARD": "DNp09",  # walk forward
+    # Smell-driven movement neurons, found with the whiff test: fire on every whiff,
+    # fire more when whiffs come more often, ignore looming. A list = one group.
+    "CHASE": ["DNge037", "DNp31", "DNg35", "DNbe001"],
 }
 
 # Smell inputs. FlyWire labels smell receptor neurons with class "olfactory";
@@ -228,10 +235,11 @@ def write_constants(cls, header: Path):
     ]
     groups = []  # (constant name, label for the comment, matching rows)
     for name, cell_type in NAMED_TYPES.items():
-        rows = cls[cls["cell_type"] == cell_type]
+        types = [cell_type] if isinstance(cell_type, str) else cell_type
+        rows = cls[cls["cell_type"].isin(types)]
         if rows.empty:
             print(f"  WARNING: no neurons found for cell type {cell_type} ({name}); check the name on Codex")
-        groups.append((name, cell_type, rows))
+        groups.append((name, " ".join(types), rows))
 
     smell = cls[cls["class"] == "olfactory"]
     if smell.empty:
