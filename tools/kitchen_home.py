@@ -124,13 +124,13 @@ M_WOOD_DOOR = door_wood_material()
 
 # ---- helpers ----
 
-def tag_and_file(actor, name, folder):
+def tag_and_file(actor, name, folder, extra_tags=()):
     actor.set_actor_label(name)
     actor.set_folder_path(folder)
-    actor.set_editor_property("tags", [TAG])
+    actor.set_editor_property("tags", [TAG] + [unreal.Name(t) for t in extra_tags])
 
 
-def box(name, cx, cy, cz, sx, sy, sz, mat, folder="Kitchen/Room", shadow=True):
+def box(name, cx, cy, cz, sx, sy, sz, mat, folder="Kitchen/Room", shadow=True, extra_tags=()):
     """cube centered at (cx, cy, cz), size (sx, sy, sz) in cm"""
     a = actors_sys.spawn_actor_from_object(CUBE, unreal.Vector(cx, cy, cz))
     a.set_actor_scale3d(unreal.Vector(sx / 100.0, sy / 100.0, sz / 100.0))
@@ -138,7 +138,7 @@ def box(name, cx, cy, cz, sx, sy, sz, mat, folder="Kitchen/Room", shadow=True):
     if mat is not None:
         comp.set_material(0, mat)
     comp.set_cast_shadow(shadow)
-    tag_and_file(a, name, folder)
+    tag_and_file(a, name, folder, extra_tags)
     return a
 
 
@@ -166,7 +166,8 @@ def ceiling_lamp(name, x, y):
 
 REPLACED = ("LeftWall", "CounterTop", "BaseCabinets")
 for a in actors_sys.get_all_level_actors():
-    if TAG in a.tags or a.get_actor_label() in REPLACED:
+    label = a.get_actor_label()
+    if TAG in a.tags or label in REPLACED or label.startswith("Grapple_Cabinet"):
         actors_sys.destroy_actor(a)
 
 # ---- seal the room so light only comes in through the window ----
@@ -202,7 +203,7 @@ box("OutsideGround", 0, 0, -1100, 60000, 60000, 100, M_GRASS, "Kitchen/Outside")
 
 # ---- door on the right wall (closed, decorative) ----
 
-box("Door", 2990, -1000, 50, 60, 900, 1900, M_WOOD, "Kitchen/Door")
+box("Door", 2990, -1000, 50, 60, 900, 1900, M_TRIM, "Kitchen/Door")
 box("Door_Handle", 2945, -620, 0, 30, 150, 30, M_HANDLE, "Kitchen/Door")
 box("Door_FrameTop", 2980, -1000, 1030, 80, 1020, 60, M_TRIM, "Kitchen/Door")
 box("Door_FrameFront", 2980, -1480, 80, 80, 60, 1960, M_TRIM, "Kitchen/Door")
@@ -239,7 +240,8 @@ def door_row(prefix, left, right, cy, cz, height, handle_y, handle_z):
         x0 = left + gap + i * (width + gap)
         box(f"{prefix}Door{i + 1}", x0 + width / 2, cy, cz, width, 15, height, M_WOOD_DOOR, C)
         hx = x0 + width - 40 if i % 2 == 0 else x0 + 40
-        box(f"{prefix}Handle{i + 1}", hx, handle_y, handle_z, 20, 15, 150, M_HANDLE, C)
+        box(f"{prefix}Handle{i + 1}", hx, handle_y, handle_z, 20, 15, 150, M_HANDLE, "GrapplePoints",
+            extra_tags=("Grapple",))
 
 
 door_row("Base", -1780, 1780, -437.5, -475, 770, -452.5, -200)
